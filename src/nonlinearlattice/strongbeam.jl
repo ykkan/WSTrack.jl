@@ -18,30 +18,48 @@ end
 
 function StrongBeam(;sp::ChargedSpecie{T}, npar::Number, 
         emmx::T, emmy::T,sigz::T,
-        betx::T, bety::T, nslice::Int, cross_angle::T=0.0, f_crab::T=1.0e38) where {T}
-  # zcuts includes head and end
-  zcuts = [sqrt(2)*sigz*erfinv(2.0*i/nslice - 1.0) for i in 0:nslice]
-  zcentroids = zeros(T, nslice)
-  for i in 1:nslice
-    z1 = zcuts[i]
-    z2 = zcuts[i+1] 
-    Q1 = 0.5 + 0.5*erf(z1/sqrt(2)/sigz)
-    Q2 = 0.5 + 0.5*erf(z2/sqrt(2)/sigz)
-    zcentroids[i] = sigz/sqrt(2*pi)/( Q2 - Q1) * ( exp(-z1^2/sigz^2/2) - exp(-z2^2/sigz^2/2) )
-  end
+        betx::T, bety::T, nslice::Int, slicing_type=1, 
+        cross_angle::T=0.0, f_crab::T=1.0e38) where {T}
 
+  z_centroids = _zcentroids(nslice, sigz, slicing_type)
+
+  # generated crabbed slice centroids
   k_crab = 2*pi*f_crab/c0
   phi = cross_angle/2
   sl_centroids = Vector{SVector{3,T}}(undef, nslice) 
   for i in 1:nslice
-    z = zcentroids[i]
+    z = z_centroids[i]
     x = -tan(phi)*(sin(k_crab*z)/k_crab - z)
     sl_centroids[i] = SVector{3,T}(x, 0, z)
   end
 
-  # reverse so that the slices are ordered from +z to -z
-  sl_centroids = reverse(sl_centroids)
   return StrongBeam(npar, sp.q, emmx, emmy, sigz, betx, bety, cross_angle, nslice, sl_centroids)
+end
+
+# compute z-centroids for the `n` slices of a 
+# strong-beam with bunch length `sig`. 
+# Z-centroids are ordered from +z to -z
+#
+# `slicing_type` is used to specify the slicing algorithm
+# - 1: equal charge, slice zcentroid determined by the mean location
+# - 2: equal charge, slice zcentroid determined by 50% of the cumultative prob. 
+function _zcentroids(n, sig::T, slicing_type::Int) where {T}
+  zcentroids = zeros(T, n)
+  if slicing_type == 1
+    zcuts = [sqrt(2)*sig*erfinv(2.0*i/n - 1.0) for i in 0:n]
+    for i in 1:n
+      z1 = zcuts[i]
+      z2 = zcuts[i+1] 
+      Q1 = 0.5 + 0.5*erf(z1/sqrt(2)/sig)
+      Q2 = 0.5 + 0.5*erf(z2/sqrt(2)/sig)
+      zcentroids[i] = sig/sqrt(2*pi)/( Q2 - Q1) * ( exp(-z1^2/sig^2/2) - exp(-z2^2/sig^2/2) )
+    end
+    reverse!(zcentroid)
+  elseif slicing_type == 2
+    zcentroids = [ sqrt(2)*sig*erfinv((2*i-1-n)/n) for i in 1:n ]
+    reverse!(zcentroids)
+  end
+  return zcentroids
 end
 
 # cpu interaction methods
