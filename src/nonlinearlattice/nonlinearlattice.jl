@@ -2,3 +2,4 @@
 include("strongbeam.jl")
 include("crab_cavity.jl")
 include("chromatickick.jl")
+include("taylormap.jl")

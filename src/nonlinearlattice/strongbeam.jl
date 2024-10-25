@@ -54,7 +54,7 @@ function _zcentroids(n, sig::T, slicing_type::Int) where {T}
       Q2 = 0.5 + 0.5*erf(z2/sqrt(2)/sig)
       zcentroids[i] = sig/sqrt(2*pi)/( Q2 - Q1) * ( exp(-z1^2/sig^2/2) - exp(-z2^2/sig^2/2) )
     end
-    reverse!(zcentroid)
+    reverse!(zcentroids)
   elseif slicing_type == 2
     zcentroids = [ sqrt(2)*sig*erfinv((2*i-1-n)/n) for i in 1:n ]
     reverse!(zcentroids)
