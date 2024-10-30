@@ -1,7 +1,7 @@
 module WSTrack
 
 using StaticArrays
-using Random, Distributions
+using Random, Distributions, PDMats
 using SpecialFunctions
 using CUDA
 using Printf
