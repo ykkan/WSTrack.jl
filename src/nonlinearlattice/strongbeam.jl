@@ -63,7 +63,7 @@ function _zcentroids(n, sig::T, slicing_type::Int) where {T}
 end
 
 # cpu interaction methods
-function interact!(beam::Beam{T}, elm::StrongBeam{T}, diag::LuminosityDiagnosis) where {T}
+function interact!(beam::Beam{T}, elm::StrongBeam{T}) where {T}
   phi = elm.cross_angle/2
   # test macro particle
   t_q = beam.q
@@ -115,7 +115,7 @@ function interact!(beam::Beam{T}, elm::StrongBeam{T}, diag::LuminosityDiagnosis)
   end
 
   lumin = abs(t_q) * abs(b_Q_slice) * lumin
-  update!(diag; luminosity=lumin)
+  return lumin
 end
 
 function lboost(coord::SVector{6,T}, phi::T) where {T}
@@ -198,7 +198,7 @@ function luminosity(x::T, y::T, s::T, emmx::T, emmy::T, betx::T, bety::T, x0::T=
   return lumin
 end
 
-function interact!(beam::BeamGPU{T}, elm::StrongBeam{T}, diag::LuminosityDiagnosis) where {T}
+function interact!(beam::BeamGPU{T}, elm::StrongBeam{T}) where {T}
   cross_angle = elm.cross_angle
 
   # test macro particle
@@ -224,7 +224,7 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeam{T}, diag::LuminosityDiagnos
   nb = ceil(Int, t_npar/GLOBAL_BLOCK_SIZE)
   @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strongbeam!(t_coords, t_npar, t_q, t_p0, b_q, b_npar, b_emmx, b_emmy, b_sigz, b_betx, b_bety, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
 
-  update!(diag; luminosity=Array(total_luminosity)[1])
+  return Array(total_luminosity)[1]
 end
 
 function _gpu_interact_strongbeam!(t_coords::CuDeviceVector{SVector{D,T},1}, t_npar::Int, t_q::T, t_p0::T, b_q::T, b_npar::T, b_emmx::T, b_emmy::T, b_sigz::T, b_betx::T, b_bety::T, b_nslice::Int, b_sl_centroids::CuDeviceVector{SVector{3,T},1}, cross_angle::T, luminosity_out::CuDeviceVector{T,1}) where {D,T}

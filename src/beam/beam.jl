@@ -3,6 +3,7 @@ include("distribution/distribution.jl")
 export Beam
 export BeamGPU
 
+
 # q: charge of a macro particle (e0)
 # m: mass of a macro particle (eV)
 # p0: momentum of a reference macro particle (eV/C)
@@ -12,7 +13,7 @@ struct Beam{T}
   q::T
   m::T
   p0::T
-  coords::Vector{SVector{6,T}}
+  coords::Vector{Coord{T}}
 end
 
 function Beam(;sp::ChargedSpecie{T}, num_particle::T, energy::T, num_macro_particle::Int, dist::Distribution{T}) where {T}
@@ -29,7 +30,7 @@ struct BeamGPU{T}
   q::T
   m::T
   p0::T
-  coords::CuVector{SVector{6,T}}
+  coords::CuVector{Coord{T}}
 end
 
 function BeamGPU(;sp::ChargedSpecie{T}, num_particle::T, energy::T, num_macro_particle::Int, dist::Distribution{T}) where {T}
