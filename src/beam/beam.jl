@@ -33,6 +33,15 @@ struct BeamGPU{T}
   coords::CuVector{Coord{T}}
 end
 
+function BeamGPU(beam::Beam{T}) where {T}
+  npar = beam.npar
+  q = beam.q
+  m = beam.m
+  p0 = beam.p0
+  coords = beam.coords
+  return BeamGPU(npar, q, m, p0, CuArray(coords))
+end
+
 function BeamGPU(;sp::ChargedSpecie{T}, num_particle::T, energy::T, num_macro_particle::Int, dist::Distribution{T}) where {T}
   npar2nmpar = num_particle/num_macro_particle
   q = npar2nmpar*sp.q
