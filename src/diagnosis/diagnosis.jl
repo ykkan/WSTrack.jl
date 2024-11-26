@@ -1,7 +1,5 @@
 include("printer.jl")
-include("mask.jl")
+include("filter.jl")
 
-include("total.jl")
+include("count.jl")
 include("covariance.jl")
-
-

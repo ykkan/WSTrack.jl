@@ -1,3 +1,6 @@
+export Coord
+export coordmax
+
 const Coord{T} = SVector{6,T}
 
 function coordmax(type)
