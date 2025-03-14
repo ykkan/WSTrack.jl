@@ -42,8 +42,8 @@ function tbinteract_coupling(x::T, y::T, s::T, Amp::T, sig11::T, sig12::T, sig13
   sig11_cp = sig11 + 2*sig12/csphi*s + sig22/csphi^2*s^2
   sig33_cp = sig33 + 2*sig34/csphi*s + sig44/csphi^2*s^2
   sig13_cp = sig13 + (sig14 + sig23)/csphi*s + sig24/csphi^2*s^2
-  dsig11_cp = 2*(sig12/csphi + sig22/csphi^2*s)
-  dsig33_cp = 2*(sig34/csphi + sig44/csphi^2*s)
+  dsig11_cp = 2*(sig12/csphi) + 2*sig22/csphi^2*s
+  dsig33_cp = 2*(sig34/csphi) + 2*sig44/csphi^2*s
   dsig13_cp = (sig14 + sig23)/csphi + 2*sig24/csphi^2*s
   
   A = sig11_cp - sig33_cp
@@ -53,7 +53,7 @@ function tbinteract_coupling(x::T, y::T, s::T, Amp::T, sig11::T, sig12::T, sig13
   dA = dsig11_cp - dsig33_cp
   dB = 2*dsig13_cp
   dC = dsig11_cp + dsig33_cp
-  dD = (A*dA + B*dB)/D^2
+  dD = (A*dA + B*dB)/D
 
   cs2th = A/D
   ss2th = B/D
@@ -75,23 +75,23 @@ function tbinteract_coupling(x::T, y::T, s::T, Amp::T, sig11::T, sig12::T, sig13
   dx_bar = x*dcsth + y*dssth
   dy_bar = -x*dssth + y*dcsth
   
-  z1 = ( sig33_cp_bar/sig11_cp_bar*x_bar + sig11_cp_bar/sig33_cp_bar*y_bar*im )/sqrt( 2*(sig11_cp_bar^2 - sig33_cp_bar^2) )
-  z2 = (x_bar + y_bar*im)/sqrt( 2*(sig11_cp_bar^2 - sig33_cp_bar^2) )
-  ef = -sqrt(2*pi/(sig11_cp_bar^2 - sig33_cp_bar^2)) * ( faddeeva(z2, Val(15)) - faddeeva(z1, Val(15) )*exp(-x_bar^2/(2*sig11_cp_bar^2) -y_bar^2/(2*sig33_cp_bar^2)) )
+
+  z1 = ( sqrt(sig33_cp_bar/sig11_cp_bar)*x_bar + sqrt(sig11_cp_bar/sig33_cp_bar)*y_bar*im )/sqrt( 2*(sig11_cp_bar - sig33_cp_bar) )
+  z2 = (x_bar + y_bar*im)/sqrt( 2*(sig11_cp_bar - sig33_cp_bar) )
+  ef = -sqrt(2*pi/(sig11_cp_bar - sig33_cp_bar)) * ( faddeeva(z2, Val(15)) - faddeeva(z1, Val(15) )*exp(-x_bar^2/sig11_cp_bar/2 -y_bar^2/sig33_cp_bar/2) )
   ux_bar = ef.im
   uy_bar = ef.re
 
-  uxx_bar = -(x_bar*ux_bar + y_bar*uy_bar)/(sig11_cp_bar^2 - sig33_cp_bar^2) -
-        2/(sig11_cp_bar^2-sig33_cp_bar^2)*(1 - sig33_cp_bar/sig11_cp_bar*exp( -x_bar^2/2/sig11_cp_bar^2 - y_bar^2/2/sig33_cp_bar^2) )
-  uyy_bar =  (x_bar*ux_bar + y_bar*uy_bar)/(sig11_cp_bar^2-sig33_cp_bar^2) +
-            2/(sig11_cp_bar^2-sig33_cp_bar^2)*( 1 - sig11_cp_bar/sig33_cp_bar*exp(-x_bar^2/2/sig11_cp_bar^2 - y_bar^2/2/sig33_cp_bar^2) )
-  uz = 0.5*(ux_bar*dx_bar + uy_bar*dy_bar +
-            sig11_cp_bar*uxx_bar*dsig11_cp_bar + sig33_cp_bar*uyy_bar*dsig33_cp_bar)
+  uxx_bar = -(x_bar*ux_bar + y_bar*uy_bar)/(sig11_cp_bar - sig33_cp_bar) -
+  2/(sig11_cp_bar - sig33_cp_bar)*( 1 - sqrt(sig33_cp_bar/sig11_cp_bar)*exp(-x_bar^2/2/sig11_cp_bar - y_bar^2/2/sig33_cp_bar) )
+  uyy_bar =  (x_bar*ux_bar + y_bar*uy_bar)/(sig11_cp_bar - sig33_cp_bar) +
+  2/(sig11_cp_bar - sig33_cp_bar)*(1 - sqrt(sig11_cp_bar/sig33_cp_bar)*exp(-x_bar^2/2/sig11_cp_bar - y_bar^2/2/sig33_cp_bar) )
+  uz = 0.5*(ux_bar*dx_bar + uy_bar*dy_bar + 0.5*uxx_bar*dsig11_cp_bar + 0.5*uyy_bar*dsig33_cp_bar)
 
   ux = ux_bar*csth - uy_bar*ssth
   uy = ux_bar*ssth + uy_bar*csth
 
-  lumin = exp( -x_bar^2/2/sig11_cp_bar^2 - y_bar^2/2/sig33_cp_bar^2 ) / (2*pi*sig11_cp_bar*sig33_cp_bar)
+  lumin = exp( -x_bar^2/2/sig11_cp_bar - y_bar^2/2/sig33_cp_bar ) / (2*pi*sqrt(sig11_cp_bar*sig33_cp_bar))
   
   return (-Amp*ux, -Amp*uy, -Amp*uz, lumin)
 end

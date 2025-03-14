@@ -186,7 +186,7 @@ function bbimpulses(x::T, y::T, s::T, A::T, emmx::T, emmy::T, betx::T, bety::T, 
             2/(sigx^2-sigy^2)*( 1 - sigx/sigy*exp(-x^2/2/sigx^2 - y^2/2/sigy^2) )
   dsigxds = sqrt(emmx/betx^3)*s/sqrt(1 + s^2/betx^2)
   dsigyds = sqrt(emmy/bety^3)*s/sqrt(1 + s^2/bety^2)
-  uz = sigx*uxx*dsigxds + sigy*uyy*dsigyds
+  uz = 0.5 * (sigx*uxx*dsigxds + sigy*uyy*dsigyds)
 
   return (-A*ux, -A*uy, -A*uz)
 end
