@@ -99,7 +99,7 @@ function interact!(beam::Beam{T}, elm::StrongBeam{T}) where {T}
       pz = pz - 0.25 * (px^2 + py^2)
 
       # kick at cp
-      dpx, dpy, dpz = bbimpulses(x, y, s, A, b_emmx, b_emmy, b_betx, b_bety, x_slice, y_slice)
+      dpx, dpy, dpz = bbimpulses(x, y, s, A, b_emmx, b_emmy, b_betx, b_bety, phi, x_slice, y_slice)
       px = px + dpx
       py = py + dpy
       pz = pz + dpz
@@ -167,26 +167,34 @@ function ilboost(x_new::T, px_new::T, y_new::T, py_new::T, z_new::T, pz_new::T, 
 end
 
 # calculate the beam-beam impulses from a slice with the center (x0, y0)
-function bbimpulses(x::T, y::T, s::T, A::T, emmx::T, emmy::T, betx::T, bety::T, x0::T=0, y0::T=0) where {T} 
-  sigx = sqrt( emmx*betx*(1 + s^2/betx^2) ) 
-  sigy = sqrt( emmy*bety*(1 + s^2/bety^2) ) 
+function bbimpulses(x::T, y::T, s::T, A::T, emmx::T, emmy::T, betx::T, bety::T, phi::T, x0::T=0, y0::T=0) where {T} 
+  sigx = sqrt(emmx*betx)
+  sigy = sqrt(emmy*bety)
+  sigx_cp = sigx*sqrt(1 + s^2/betx^2) 
+  sigy_cp = sigy*sqrt(1 + s^2/bety^2)
 
+  csphi = cos(phi)
   x = x - x0
   y = y - y0
 
-  z1 = ( sigy/sigx*x + sigx/sigy*y*im )/sqrt(2*sigx^2 - 2*sigy^2)
-  z2 = (x + y*im)/sqrt(2*sigx^2 - 2*sigy^2)
-  ef = -sqrt(2*pi/(sigx^2 - sigy^2)) * ( faddeeva(z2, Val(15)) - faddeeva(z1, Val(15) )*exp(-x^2/(2*sigx^2) -y^2/(2*sigy^2)) )
+  z1 = ( sigy_cp/sigx_cp*x + sigx_cp/sigy_cp*y*im )/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
+  z2 = (x + y*im)/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
+  ef = -sqrt(2*pi/(sigx_cp^2 - sigy_cp^2)) * ( faddeeva(z2, Val(15)) - faddeeva(z1, Val(15) )*exp(-x^2/(2*sigx_cp^2) -y^2/(2*sigy_cp^2)) )
   ux = ef.im
   uy = ef.re
 
-  uxx = -(x*ux + y*uy)/(sigx^2-sigy^2) -
-        2/(sigx^2-sigy^2)*( 1 - sigy/sigx*exp(-x^2/2/sigx^2 - y^2/2/sigy^2) )
-  uyy =  (x*ux + y*uy)/(sigx^2-sigy^2) +
-            2/(sigx^2-sigy^2)*( 1 - sigx/sigy*exp(-x^2/2/sigx^2 - y^2/2/sigy^2) )
-  dsigxds = sqrt(emmx/betx^3)*s/sqrt(1 + s^2/betx^2)
-  dsigyds = sqrt(emmy/bety^3)*s/sqrt(1 + s^2/bety^2)
-  uz = 0.5 * (sigx*uxx*dsigxds + sigy*uyy*dsigyds)
+  uxx = -(x*ux + y*uy)/(sigx_cp^2-sigy_cp^2) - 2/(sigx_cp^2-sigy_cp^2)*( 1 - sigy_cp/sigx_cp*exp(-x^2/2/sigx_cp^2 - y^2/2/sigy_cp^2) )
+  uyy =  (x*ux + y*uy)/(sigx_cp^2-sigy_cp^2) + 2/(sigx_cp^2-sigy_cp^2)*( 1 - sigx_cp/sigy_cp*exp(-x^2/2/sigx_cp^2 - y^2/2/sigy_cp^2) )
+
+
+  dsigxxds_cp = 2*(sigx/betx/csphi)^2*s
+  dsigyyds_cp = 2*(sigy/bety/csphi)^2*s
+  #dsigxxds_cp = sqrt(emmx/betx^3)*s/sqrt(1 + s^2/betx^2)/csphi^2
+  #dsigyyds_cp = sqrt(emmy/bety^3)*s/sqrt(1 + s^2/bety^2)/csphi^2
+
+  #uz = 0.5 * (sigx*uxx*dsigxds + sigy*uyy*dsigyds)
+
+  uz = 0.5 * (0.5*uxx*dsigxxds_cp + 0.5*uyy*dsigyyds_cp)
 
   return (-A*ux, -A*uy, -A*uz)
 end
@@ -257,7 +265,7 @@ function _gpu_interact_strongbeam!(t_coords::CuDeviceVector{SVector{D,T},1}, t_n
       pz = pz - 0.25 * (px^2 + py^2)
 
       # kick at cp
-      dpx, dpy, dpz = bbimpulses(x, y, s, A, b_emmx, b_emmy, b_betx, b_bety, x_slice, y_slice)
+      dpx, dpy, dpz = bbimpulses(x, y, s, A, b_emmx, b_emmy, b_betx, b_bety, phi, x_slice, y_slice)
       px = px + dpx
       py = py + dpy
       pz = pz + dpz
