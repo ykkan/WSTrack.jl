@@ -1,10 +1,10 @@
-export StrongBeamCoupling
+export StrongBeamCoupled4D
 
 ######
 # charge normalzied to e0
 # mass normalized to electron mass
 # sigs = [sig11..sig14, sig22...sig24, sig33, sig34, sig44]
-struct StrongBeamCoupling{T}
+struct StrongBeamCoupled4D{T}
   npar::T
   q::T
   Sigma::SVector{10,T}
@@ -14,7 +14,7 @@ struct StrongBeamCoupling{T}
   slice_centroids::Vector{SVector{3,T}}
 end
 
-function StrongBeamCoupling(;sp::ChargedSpecie{T}, npar::Number,
+function StrongBeamCoupled4D(;sp::ChargedSpecie{T}, npar::Number,
         Sigma::AbstractVector{T}, sigz::T, nslice::Int, slicing_type=1, 
         cross_angle::T, f_crab::T=1.0e38) where {T}
   z_centroids = _zcentroids(nslice, sigz, slicing_type)
@@ -28,11 +28,11 @@ function StrongBeamCoupling(;sp::ChargedSpecie{T}, npar::Number,
     x = -tan(phi)*(sin(k_crab*z)/k_crab - z)
     sl_centroids[i] = SVector{3,T}(x, 0, z)
   end
-  return StrongBeamCoupling(npar, sp.q, SVector{10,T}(Sigma), sigz, cross_angle, nslice, sl_centroids)
+  return StrongBeamCoupled4D(npar, sp.q, SVector{10,T}(Sigma), sigz, cross_angle, nslice, sl_centroids)
 end
 
 
-function tbinteract_coupling(x::T, y::T, s::T, Amp::T, sig11::T, sig12::T, sig13::T, sig14::T, sig22::T, sig23::T, sig24::T, sig33::T, sig34::T, sig44::T, phi::T, x0::T=0, y0::T=0) where {T} 
+function par_sl_interaction_coupled4D(x::T, y::T, s::T, Amp::T, sig11::T, sig12::T, sig13::T, sig14::T, sig22::T, sig23::T, sig24::T, sig33::T, sig34::T, sig44::T, phi::T, x0::T=0, y0::T=0) where {T} 
 
   x = x - x0
   y = y - y0
@@ -96,7 +96,73 @@ function tbinteract_coupling(x::T, y::T, s::T, Amp::T, sig11::T, sig12::T, sig13
   return (-Amp*ux, -Amp*uy, -Amp*uz, lumin)
 end
 
-function interact!(beam::BeamGPU{T}, elm::StrongBeamCoupling{T}) where {T}
+# CPU
+function interact!(beam::Beam{T}, elm::StrongBeamCoupled4D{T}) where {T}
+  phi = elm.cross_angle/2
+  # test macro particle
+  t_q = beam.q
+  t_p0 = beam.p0
+
+  # bunch 
+  b_q = elm.q
+  b_npar = elm.npar
+ 
+  b_Sigma = elm.Sigma
+  b_sig11 = b_Sigma[1] 
+  b_sig12 = b_Sigma[2] 
+  b_sig13 = b_Sigma[3] 
+  b_sig14 = b_Sigma[4] 
+  b_sig22 = b_Sigma[5] 
+  b_sig23 = b_Sigma[6] 
+  b_sig24 = b_Sigma[7] 
+  b_sig33 = b_Sigma[8] 
+  b_sig34 = b_Sigma[9] 
+  b_sig44 = b_Sigma[10] 
+  b_sigz = elm.sigz
+  b_nslice = elm.nslice
+  b_sl_centroids = elm.slice_centroids
+  b_Q_slice = b_q*b_npar/b_nslice
+
+  # leading constant for beam-beam force from each slice
+  A = t_q * b_Q_slice * e0 / (4*pi*epsilon0) / t_p0
+  coords = beam.coords
+  luminosity = zero(T)
+  Threads.@threads for i in 1:beam.npar
+    x, px, y, py, z, pz = lboost(coords[i], phi)
+    
+    # collides with a sequence of slices 
+    for k in 1:b_nslice
+      x_slice, y_slice, z_slice = b_sl_centroids[k]
+      s = (z - z_slice)/2.0
+  
+      # drift from ip to cp
+      x = x + s*px
+      y = y + s*py
+      pz = pz - 0.25 * (px^2 + py^2)
+
+      # kick at cp
+      dpx, dpy, dpz, lumin = par_sl_interaction_coupled4D(x, y, s, A, sig11, sig12, sig13, sig14, sig22, sig23, sig24, sig33, sig34, sig44, phi, x_slice, y_slice) where {T} 
+      px = px + dpx
+      py = py + dpy
+      pz = pz + dpz
+
+      # dirft back from cp to ip
+      x = x - s*px
+      y = y - s*py
+      pz = pz + 0.25 * (px^2 + py^2)
+
+      luminosity += par_sl_luminosity(x, y, sigx, sigy)
+    end
+    coords[i] = ilboost(x, px, y, py, z, pz, phi)
+  end
+
+  luminosity = abs(t_q) * abs(b_Q_slice) * luminosity
+  return luminosity
+end
+
+
+# GPU 
+function interact!(beam::BeamGPU{T}, elm::StrongBeamCoupled4D{T}) where {T}
   cross_angle = elm.cross_angle
 
   # test macro particle
@@ -128,14 +194,12 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeamCoupling{T}) where {T}
   global total_luminosity = CuArray([zero(T)])
 
   nb = ceil(Int, t_npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_coupling!(t_coords, t_npar, t_q, t_p0, b_q, b_npar,
-        b_sig11, b_sig12, b_sig13, b_sig14, b_sig22, b_sig23, b_sig24, b_sig33, b_sig34, b_sig44, b_sigz, 
-        b_nslice, b_sl_centroids, cross_angle, total_luminosity)
+  @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_coupled4D!(t_coords, t_npar, t_q, t_p0, b_q, b_npar, b_sig11, b_sig12, b_sig13, b_sig14, b_sig22, b_sig23, b_sig24, b_sig33, b_sig34, b_sig44, b_sigz, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
 
   return Array(total_luminosity)[1]
 end
 
-function _gpu_interact_strong_beam_coupling!(t_coords::CuDeviceVector{SVector{D,T},1}, t_npar::Int, t_q::T, t_p0::T, b_q::T, b_npar::T,
+function _gpu_interact_strong_beam_coupled4D!(t_coords::CuDeviceVector{SVector{D,T},1}, t_npar::Int, t_q::T, t_p0::T, b_q::T, b_npar::T,
         b_sig11::T, b_sig12::T, b_sig13::T, b_sig14::T, b_sig22::T, b_sig23::T, b_sig24::T, b_sig33::T, b_sig34::T, b_sig44::T, b_sigz::T, 
         b_nslice::Int, b_sl_centroids::CuDeviceVector{SVector{3,T},1}, 
         cross_angle::T, luminosity_out::CuDeviceVector{T,1}) where {D,T}
@@ -167,7 +231,7 @@ function _gpu_interact_strong_beam_coupling!(t_coords::CuDeviceVector{SVector{D,
       pz = pz - 0.25 * (px^2 + py^2)
 
       # kick at cp
-      dpx, dpy, dpz, lumin = tbinteract_coupling(x, y, s, Amp, b_sig11, b_sig12, b_sig13, b_sig14, b_sig22, b_sig23, b_sig24, b_sig33, b_sig34, b_sig44, cross_angle/2, x_slice, y_slice)
+      dpx, dpy, dpz, lumin = par_sl_interaction_coupled4D(x, y, s, Amp, b_sig11, b_sig12, b_sig13, b_sig14, b_sig22, b_sig23, b_sig24, b_sig33, b_sig34, b_sig44, cross_angle/2, x_slice, y_slice)
 
       px = px + dpx
       py = py + dpy
