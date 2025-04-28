@@ -5,7 +5,7 @@ export StrongBeamCoupled4D
 # mass normalized to electron mass
 # sigs = [sig11..sig14, sig22...sig24, sig33, sig34, sig44]
 struct StrongBeamCoupled4D{T}
-  npar::T
+  np::T
   q::T
   Sigma::SVector{10,T}
   sigz::T
@@ -14,7 +14,7 @@ struct StrongBeamCoupled4D{T}
   slice_centroids::Vector{SVector{3,T}}
 end
 
-function StrongBeamCoupled4D(;sp::ChargedSpecie{T}, npar::Number,
+function StrongBeamCoupled4D(;sp::ChargedSpecie{T}, np::Number,
         Sigma::AbstractVector{T}, sigz::T, nslice::Int, slicing_type=1, 
         cross_angle::T, f_crab::T=1.0e38) where {T}
   z_centroids = _zcentroids(nslice, sigz, slicing_type)
@@ -28,7 +28,7 @@ function StrongBeamCoupled4D(;sp::ChargedSpecie{T}, npar::Number,
     x = -tan(phi)*(sin(k_crab*z)/k_crab - z)
     sl_centroids[i] = SVector{3,T}(x, 0, z)
   end
-  return StrongBeamCoupled4D(npar, sp.q, SVector{10,T}(Sigma), sigz, cross_angle, nslice, sl_centroids)
+  return StrongBeamCoupled4D(np, sp.q, SVector{10,T}(Sigma), sigz, cross_angle, nslice, sl_centroids)
 end
 
 
@@ -105,7 +105,7 @@ function interact!(beam::Beam{T}, elm::StrongBeamCoupled4D{T}) where {T}
 
   # bunch 
   b_q = elm.q
-  b_npar = elm.npar
+  b_np = elm.np
  
   b_Sigma = elm.Sigma
   b_sig11 = b_Sigma[1] 
@@ -121,13 +121,13 @@ function interact!(beam::Beam{T}, elm::StrongBeamCoupled4D{T}) where {T}
   b_sigz = elm.sigz
   b_nslice = elm.nslice
   b_sl_centroids = elm.slice_centroids
-  b_Q_slice = b_q*b_npar/b_nslice
+  b_Q_slice = b_q*b_np/b_nslice
 
   # leading constant for beam-beam force from each slice
   A = t_q * b_Q_slice * e0 / (4*pi*epsilon0) / t_p0
   coords = beam.coords
   luminosity = zero(T)
-  Threads.@threads for i in 1:beam.npar
+  Threads.@threads for i in 1:beam.nmp
     x, px, y, py, z, pz = lboost(coords[i], phi)
     
     # collides with a sequence of slices 
@@ -166,14 +166,14 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeamCoupled4D{T}) where {T}
   cross_angle = elm.cross_angle
 
   # test macro particle
-  t_npar = beam.npar
+  t_nmp = beam.nmp
   t_coords = beam.coords
   t_q = beam.q
   t_p0 = beam.p0
 
   # bunch 
   b_q = elm.q
-  b_npar = elm.npar
+  b_np = elm.np
  
   b_Sigma = elm.Sigma
   b_sig11 = b_Sigma[1] 
@@ -193,19 +193,19 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeamCoupled4D{T}) where {T}
   # luminosity 
   global total_luminosity = CuArray([zero(T)])
 
-  nb = ceil(Int, t_npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_coupled4D!(t_coords, t_npar, t_q, t_p0, b_q, b_npar, b_sig11, b_sig12, b_sig13, b_sig14, b_sig22, b_sig23, b_sig24, b_sig33, b_sig34, b_sig44, b_sigz, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
+  nb = ceil(Int, t_nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_coupled4D!(t_coords, t_nmp, t_q, t_p0, b_q, b_np, b_sig11, b_sig12, b_sig13, b_sig14, b_sig22, b_sig23, b_sig24, b_sig33, b_sig34, b_sig44, b_sigz, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
 
   return Array(total_luminosity)[1]
 end
 
-function _gpu_interact_strong_beam_coupled4D!(t_coords::CuDeviceVector{SVector{D,T},1}, t_npar::Int, t_q::T, t_p0::T, b_q::T, b_npar::T,
+function _gpu_interact_strong_beam_coupled4D!(t_coords::CuDeviceVector{SVector{D,T},1}, t_nmp::Int, t_q::T, t_p0::T, b_q::T, b_np::T,
         b_sig11::T, b_sig12::T, b_sig13::T, b_sig14::T, b_sig22::T, b_sig23::T, b_sig24::T, b_sig33::T, b_sig34::T, b_sig44::T, b_sigz::T, 
         b_nslice::Int, b_sl_centroids::CuDeviceVector{SVector{3,T},1}, 
         cross_angle::T, luminosity_out::CuDeviceVector{T,1}) where {D,T}
 
   phi = cross_angle/2
-  b_Q_slice = b_q*b_npar/b_nslice
+  b_Q_slice = b_q*b_np/b_nslice
   # leading constant for beam-beam force from each slice
   Amp = t_q * b_Q_slice * e0 / (4*pi*epsilon0) / t_p0
 
@@ -215,7 +215,7 @@ function _gpu_interact_strong_beam_coupled4D!(t_coords::CuDeviceVector{SVector{D
   gid = tid + (bid - 1) * block_size
 
   local_luminosity = zero(T)
-  if gid <= t_npar
+  if gid <= t_nmp
     #@cuprint t_coords[gid][1] t_coords[gid][2] t_coords[gid][3] t_coords[gid][4] t_coords[gid][5] t_coords[gid][6] 
     #@cuprint "\n"
     x, px, y, py, z, pz = lboost(t_coords[gid], phi)

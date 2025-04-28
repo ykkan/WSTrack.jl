@@ -44,10 +44,10 @@ function interact!(beam::Beam{T}, elm::RadiationDamp{T}) where {T}
   sly = sqrt(1 - ly^2)
   slz = sqrt(1 - lz^2)
 
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
   d = Normal()
-  Threads.@threads for i in 1:npar
+  Threads.@threads for i in 1:nmp
     x, px, y, py, z, pz = coords[i]
     x_new = lx*x + rand(d)*sigx*slx
     px_new = lx*px + rand(d)*sigpx*slx
@@ -75,20 +75,20 @@ function interact!(beam::BeamGPU{T}, elm::RadiationDamp{T}) where {T}
   sly = sqrt(1 - ly^2)
   slz = sqrt(1 - lz^2)
 
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
-  nb = ceil(Int, npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_interact_radiation_damp!(coords, npar, lx, ly, lz, slx, sly, slz, sigx, sigy, sigz, sigpx, sigpy, sigpz)
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_interact_radiation_damp!(coords, nmp, lx, ly, lz, slx, sly, slz, sigx, sigy, sigz, sigpx, sigpy, sigpz)
 end
 
-function _gpu_interact_radiation_damp!(coords::CuDeviceVector{SVector{6,T},1}, npar::Int, lx::T, ly::T, lz::T, slx::T, sly::T, slz::T, sigx::T, sigy::T, sigz::T, sigpx::T, sigpy::T, sigpz::T) where {T}
+function _gpu_interact_radiation_damp!(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, lx::T, ly::T, lz::T, slx::T, sly::T, slz::T, sigx::T, sigy::T, sigz::T, sigpx::T, sigpy::T, sigpz::T) where {T}
 
   d = Normal()
   tid = threadIdx().x
   bid = blockIdx().x
   block_size = blockDim().x 
   gid = tid + (bid - 1) * block_size
-  if gid <= npar
+  if gid <= nmp
     x, px, y, py, z, pz = coords[gid]
     x_new = lx*x + rand(d)*sigx*slx
     px_new = lx*px + rand(d)*sigpx*slx

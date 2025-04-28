@@ -4,7 +4,7 @@ export StrongBeamDecoupled
 # charge normalzied to e0
 # mass normalized to electron mass
 struct StrongBeamDecoupled{T}
-  npar::T
+  np::T
   q::T
   sigx::T
   sigpx::T
@@ -16,7 +16,7 @@ struct StrongBeamDecoupled{T}
   slice_centroids::Vector{SVector{3,T}}
 end
 
-function StrongBeamDecoupled(;sp::ChargedSpecie{T}, npar::Number, 
+function StrongBeamDecoupled(;sp::ChargedSpecie{T}, np::Number, 
         sigx::T, sigpx::T, sigy::T, sigpy::T, sigz::T,
         nslice::Int, slicing_type=1, 
         cross_angle::T=0.0, f_crab::T=1.0e38) where {T}
@@ -33,7 +33,7 @@ function StrongBeamDecoupled(;sp::ChargedSpecie{T}, npar::Number,
     sl_centroids[i] = SVector{3,T}(x, 0, z)
   end
 
-  return StrongBeamDecoupled(npar, sp.q, sigx, sigpx, sigy, sigpy, sigz, cross_angle, nslice, sl_centroids)
+  return StrongBeamDecoupled(np, sp.q, sigx, sigpx, sigy, sigpy, sigz, cross_angle, nslice, sl_centroids)
 end
 
 
@@ -75,7 +75,7 @@ function interact!(beam::Beam{T}, elm::StrongBeamDecoupled{T}) where {T}
 
   # bunch 
   b_q = elm.q
-  b_npar = elm.npar
+  b_np = elm.np
   b_sigx = elm.sigx
   b_sigpx = elm.sigpx
   b_sigy = elm.sigy
@@ -83,13 +83,13 @@ function interact!(beam::Beam{T}, elm::StrongBeamDecoupled{T}) where {T}
   b_sigz = elm.sigz
   b_nslice = elm.nslice
   b_sl_centroids = elm.slice_centroids
-  b_Q_slice = b_q*b_npar/b_nslice
+  b_Q_slice = b_q*b_np/b_nslice
 
   # leading constant for beam-beam force from each slice
   A = t_q * b_Q_slice * e0 / (4*pi*epsilon0) / t_p0
   coords = beam.coords
   luminosity = zero(T)
-  Threads.@threads for i in 1:beam.npar
+  Threads.@threads for i in 1:beam.nmp
     x, px, y, py, z, pz = lboost(coords[i], phi)
     
     # collides with a sequence of slices 
@@ -129,14 +129,14 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeamDecoupled{T}) where {T}
   cross_angle = elm.cross_angle
 
   # test macro particle
-  t_npar = beam.npar
+  t_nmp = beam.nmp
   t_coords = beam.coords
   t_q = beam.q
   t_p0 = beam.p0
 
   # bunch 
   b_q = elm.q
-  b_npar = elm.npar
+  b_np = elm.np
   b_sigx = elm.sigx
   b_sigpx = elm.sigpx
   b_sigy = elm.sigy
@@ -148,16 +148,16 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeamDecoupled{T}) where {T}
   # luminosity 
   global total_luminosity = CuArray([zero(T)])
 
-  nb = ceil(Int, t_npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_decoupled!(t_coords, t_npar, t_q, t_p0, b_q, b_npar, b_sigx, b_sigpx, b_sigy, b_sigpy, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
+  nb = ceil(Int, t_np/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_decoupled!(t_coords, t_nmp, t_q, t_p0, b_q, b_np, b_sigx, b_sigpx, b_sigy, b_sigpy, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
 
   return Array(total_luminosity)[1]
 end
 
-function _gpu_interact_strong_beam_decoupled!(t_coords::CuDeviceVector{SVector{D,T},1}, t_npar::Int, t_q::T, t_p0::T, b_q::T, b_npar::T, b_sigx::T, b_sigpx::T, b_sigy::T, b_sigpy::T, b_nslice::Int, b_sl_centroids::CuDeviceVector{SVector{3,T},1}, cross_angle::T, luminosity_out::CuDeviceVector{T,1}) where {D,T}
+function _gpu_interact_strong_beam_decoupled!(t_coords::CuDeviceVector{SVector{D,T},1}, t_nmp::Int, t_q::T, t_p0::T, b_q::T, b_np::T, b_sigx::T, b_sigpx::T, b_sigy::T, b_sigpy::T, b_nslice::Int, b_sl_centroids::CuDeviceVector{SVector{3,T},1}, cross_angle::T, luminosity_out::CuDeviceVector{T,1}) where {D,T}
 
   phi = cross_angle/2
-  b_Q_slice = b_q*b_npar/b_nslice
+  b_Q_slice = b_q*b_np/b_nslice
 
   # leading constant for beam-beam force from each slice
   A = t_q * b_Q_slice * e0 / (4*pi*epsilon0) / t_p0
@@ -168,7 +168,7 @@ function _gpu_interact_strong_beam_decoupled!(t_coords::CuDeviceVector{SVector{D
   gid = tid + (bid - 1) * block_size
 
   local_luminosity = zero(T)
-  if gid <= t_npar
+  if gid <= t_nmp
     #@cuprint t_coords[gid][1] t_coords[gid][2] t_coords[gid][3] t_coords[gid][4] t_coords[gid][5] t_coords[gid][6] 
     #@cuprint "\n"
     x, px, y, py, z, pz = lboost(t_coords[gid], phi)

@@ -21,7 +21,7 @@ function interact!(beam::Beam{T}, elm::CrabCavity{T,N}) where {T,N}
   phi = elm.phi
   strength_factors = elm.strength_factors
   coords = beam.coords 
-  Threads.@threads for i in 1:beam.npar
+  Threads.@threads for i in 1:beam.nmp
     x, px, y, py, z, pz = coords[i]
     for n in 1:N
       k = k0 * n
@@ -40,21 +40,21 @@ function interact!(beam::BeamGPU{T}, elm::CrabCavity{T,N}) where {T,N}
   k0 = elm.k0
   phi = elm.phi
   strength_factors = elm.strength_factors
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
-  nb = ceil(Int, npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_interact_crab_cavity!(coords, npar, kick_strength, k0, phi, strength_factors)
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_interact_crab_cavity!(coords, nmp, kick_strength, k0, phi, strength_factors)
 end
 
 function _gpu_interact_crab_cavity!(
-        coords::CuDeviceVector{SVector{6,T},1}, npar::Int, 
+        coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, 
         kick_strength::T, k0::T, phi::T, strength_factors::SVector{N,T}) where {N,T}
 
   tid = threadIdx().x
   bid = blockIdx().x
   block_size = blockDim().x 
   gid = tid + (bid - 1) * block_size
-  if gid <= npar
+  if gid <= nmp
     x, px, y, py, z, pz = coords[gid]
     for n in 1:N
       k = k0 * n

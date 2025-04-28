@@ -12,7 +12,7 @@ function interact!(beam::Beam{T}, elm::RFKick{T}) where {T}
   phi = elm.phi
 
   coords = beam.coords 
-  Threads.@threads for i in 1:beam.npar
+  Threads.@threads for i in 1:beam.nmp
     x, px, y, py, z, pz = coords[i]
     pz_new = amp*sin(k*z + phi)
     coords[i] = SVector{6,T}(x, px, y, py, z, pz_new)
@@ -25,21 +25,21 @@ function interact!(beam::BeamGPU{T}, elm::RFKick{T}) where {T}
   k = elm.k
   phi = elm.phi
 
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
-  nb = ceil(Int, npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb  _gpu_interact_rf_kick!(coords, npar, amp, k, phi)
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb  _gpu_interact_rf_kick!(coords, nmp, amp, k, phi)
 end
 
 function _gpu_interact_rf_kick!(
-        coords::CuDeviceVector{SVector{6,T},1}, npar::Int, 
+        coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, 
         amp::T, k::T, phi::T) where T
 
   tid = threadIdx().x
   bid = blockIdx().x
   block_size = blockDim().x 
   gid = tid + (bid - 1) * block_size
-  if gid <= npar
+  if gid <= nmp
     x, px, y, py, z, pz = coords[gid]
     pz_new = amp*sin(k*z + phi)
     coords[gid] = SVector{6,T}(x, px, y, py, z, pz_new)

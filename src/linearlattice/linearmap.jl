@@ -11,32 +11,32 @@ end
 
 # cpu 
 function interact!(beam::Beam, elm::LinearMap)
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
   A = elm.A
   b = elm.b
-  Threads.@threads for i in 1:npar
+  Threads.@threads for i in 1:nmp
     coords[i] = A*coords[i] + b
   end
 end
 
 # gpu
 function interact!(beam::BeamGPU, elm::LinearMap)
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
-  nb = ceil(Int, npar/GLOBAL_BLOCK_SIZE) 
-  @cuda blocks=nb threads=GLOBAL_BLOCK_SIZE _gpu_interact_linearmap!(coords, npar, elm.A, elm.b)
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE) 
+  @cuda blocks=nb threads=GLOBAL_BLOCK_SIZE _gpu_interact_linearmap!(coords, nmp, elm.A, elm.b)
 end
 
 function _gpu_interact_linearmap!(
-        coords::CuDeviceVector{SVector{D,T},1}, npar::Int, A::SMatrix{D,D,T}, 
+        coords::CuDeviceVector{SVector{D,T},1}, nmp::Int, A::SMatrix{D,D,T}, 
         b::SVector{D,T}) where {D,T}
 
   tid = threadIdx().x
   bid = blockIdx().x
   block_size = blockDim().x 
   gid = tid + (bid - 1) * block_size
-  if gid <= npar
+  if gid <= nmp
     coords[gid] = A*coords[gid] + b
   end
 

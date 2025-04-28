@@ -9,7 +9,8 @@ export BeamGPU
 # p0: momentum of a reference macro particle (eV/C)
 # coords: ( x, px/P0, y, py/P0, z, (p-P0)/P0 ) x, y, z (m)
 struct Beam{T} 
-  npar::Int
+  nmp::Int
+  np2nmp::T
   q::T
   m::T
   p0::T
@@ -17,16 +18,17 @@ struct Beam{T}
 end
 
 function Beam(;sp::ChargedSpecie{T}, num_particle::T, energy::T, num_macro_particle::Int, dist::Distribution{T}) where {T}
-  npar2nmpar = num_particle/num_macro_particle
-  q = npar2nmpar*sp.q
-  m = npar2nmpar*sp.m
-  p0 = npar2nmpar*sqrt(energy^2 - sp.m^2)
+  np2nmp = num_particle/num_macro_particle
+  q = np2nmp*sp.q
+  m = np2nmp*sp.m
+  p0 = np2nmp*sqrt(energy^2 - sp.m^2)
   coords = dist(num_macro_particle)
-  return Beam(num_macro_particle, q, m, p0, coords)
+  return Beam(num_macro_particle, np2nmp, q, m, p0, coords)
 end
 
 struct BeamGPU{T}
-  npar::Int
+  nmp::Int
+  np2nmp::T
   q::T
   m::T
   p0::T
@@ -34,19 +36,20 @@ struct BeamGPU{T}
 end
 
 function BeamGPU(beam::Beam{T}) where {T}
-  npar = beam.npar
+  nmp = beam.nmp
+  np2nmp = beam.np2nmp
   q = beam.q
   m = beam.m
   p0 = beam.p0
   coords = beam.coords
-  return BeamGPU(npar, q, m, p0, CuArray(coords))
+  return BeamGPU(nmp, np2nmp, q, m, p0, CuArray(coords))
 end
 
 function BeamGPU(;sp::ChargedSpecie{T}, num_particle::T, energy::T, num_macro_particle::Int, dist::Distribution{T}) where {T}
-  npar2nmpar = num_particle/num_macro_particle
-  q = npar2nmpar*sp.q
-  m = npar2nmpar*sp.m
-  p0 = npar2nmpar*sqrt(energy^2 - sp.m^2)
+  np2nmp = num_particle/num_macro_particle
+  q = np2nmp*sp.q
+  m = np2nmp*sp.m
+  p0 = np2nmp*sqrt(energy^2 - sp.m^2)
   coords = CuArray(dist(num_macro_particle))
-  return BeamGPU(num_macro_particle, q, m, p0, coords)
+  return BeamGPU(num_macro_particle, np2nmp, q, m, p0, coords)
 end

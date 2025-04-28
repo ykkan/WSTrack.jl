@@ -22,7 +22,7 @@ function interact!(beam::Beam{T}, elm::ChromaticKick{T}) where {T}
   gamay =  elm.gamay
 
   coords = beam.coords 
-  Threads.@threads for i in 1:beam.npar
+  Threads.@threads for i in 1:beam.nmp
     x, px, y, py, z, pz = coords[i]
     phix = 2*pi*chromx*pz
     phiy = 2*pi*chromy*pz
@@ -54,15 +54,15 @@ function interact!(beam::BeamGPU{T}, elm::ChromaticKick{T}) where {T}
   gamax =  elm.gamax
   gamay =  elm.gamay
 
-  npar = beam.npar
+  nmp = beam.nmp
   coords = beam.coords
-  nb = ceil(Int, npar/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb  _gpu_interact_chromatic_kick!(coords, npar, chromx, chromy, betx, bety, alfx, alfy, gamax, gamay)
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb  _gpu_interact_chromatic_kick!(coords, nmp, chromx, chromy, betx, bety, alfx, alfy, gamax, gamay)
 
 end
 
 function _gpu_interact_chromatic_kick!(
-        coords::CuDeviceVector{SVector{6,T},1}, npar::Int, 
+        coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, 
         chromx::T, chromy::T, betx::T, bety::T, 
         alfx::T, alfy::T, gamax::T, gamay::T) where {T}
 
@@ -70,7 +70,7 @@ function _gpu_interact_chromatic_kick!(
   bid = blockIdx().x
   block_size = blockDim().x 
   gid = tid + (bid - 1) * block_size
-  if gid <= npar
+  if gid <= nmp
     x, px, y, py, z, pz = coords[gid]
     phix = 2*pi*chromx*pz
     phiy = 2*pi*chromy*pz

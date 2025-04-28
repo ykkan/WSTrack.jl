@@ -69,9 +69,9 @@ function TaylorMap(polynomials::NTuple{N,Polynomial{N,I,T}}) where {N,I,T}
   sv_ex = :(SVector{$N,$T})
   cpu_func = quote
     function interact!(beam::Beam{$T}, elm::$(map_name))
-      npar = beam.npar
+      nmp = beam.nmp
       coords = beam.coords
-      Threads.@threads for i in 1:npar
+      Threads.@threads for i in 1:nmp
         $( Expr(:tuple, xvars...) ) = coords[i]
         $( __taylormap_ex(polynomials, yvars, xvars) )
         coords[i] = $( Expr(:call, sv_ex, yvars...) )
@@ -86,24 +86,24 @@ function TaylorMap(polynomials::NTuple{N,Polynomial{N,I,T}}) where {N,I,T}
                               bid = blockIdx().x
                               block_size = blockDim().x 
                               gid = tid + (bid - 1) * block_size
-                              if gid <= npar
+                              if gid <= nmp
                                 $( Expr(:tuple, xvars...) ) = coords[gid]
                                 $( __taylormap_ex(polynomials, yvars, xvars) )
                                 coords[gid] = $( Expr(:call, sv_ex, yvars...) )
                               end
                               return nothing
                           end
-  gpu_internal_func_def = Expr(:where, Expr(:call, gpu_internal_func_name, :(coords::CuDeviceVector{SVector{6,T},1}), :npar), :T)
+  gpu_internal_func_def = Expr(:where, Expr(:call, gpu_internal_func_name, :(coords::CuDeviceVector{SVector{6,T},1}), :nmp), :T)
   gpu_internal_func = Expr(:function, gpu_internal_func_def, gpu_internal_func_body) 
   eval(gpu_internal_func)
 
   gpu_interface_func = quote
     function interact!(beam::BeamGPU{$T}, elm::$(map_name)) 
-       npar = beam.npar
+       nmp = beam.nmp
        coords = beam.coords
 
-       nb = ceil(Int, npar/GLOBAL_BLOCK_SIZE)
-       @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb $(Expr(:call, gpu_internal_func_name, :coords, :npar))
+       nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+       @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb $(Expr(:call, gpu_internal_func_name, :coords, :nmp))
     end
   end
   eval(gpu_interface_func)
