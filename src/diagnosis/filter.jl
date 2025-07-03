@@ -1,8 +1,9 @@
 export RectBound
 export EllipseBound
 
+abstract type Filter{T} end
 
-Base.@kwdef struct RectBound{T}
+Base.@kwdef struct RectBound{T} <: Filter{T}
   bound::Coord{T}=coordmax(T)
 end
 
@@ -11,7 +12,7 @@ function (m::RectBound{T})(coord::Coord{T}) where {T}
 end
 
 
-Base.@kwdef struct EllipseBound{T}
+Base.@kwdef struct EllipseBound{T} <: Filter{T}
   bound::Coord{T}=coordmax(T)
 end
 

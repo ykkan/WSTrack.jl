@@ -15,5 +15,6 @@ include("beam/beam.jl")
 include("diagnosis/diagnosis.jl")
 include("linearlattice/linearlattice.jl")
 include("nonlinearlattice/nonlinearlattice.jl")
+include("intrabeam_scattering/intrabeam_scattering.jl")
 
 end
