@@ -148,7 +148,7 @@ function interact!(beam::BeamGPU{T}, elm::StrongBeamDecoupled{T}) where {T}
   # luminosity 
   global total_luminosity = CuArray([zero(T)])
 
-  nb = ceil(Int, t_np/GLOBAL_BLOCK_SIZE)
+  nb = ceil(Int, t_nmp/GLOBAL_BLOCK_SIZE)
   @cuda threads=GLOBAL_BLOCK_SIZE  blocks=nb  _gpu_interact_strong_beam_decoupled!(t_coords, t_nmp, t_q, t_p0, b_q, b_np, b_sigx, b_sigpx, b_sigy, b_sigpy, b_nslice, b_sl_centroids, cross_angle, total_luminosity)
 
   return Array(total_luminosity)[1]
