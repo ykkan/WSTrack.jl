@@ -1,3 +1,4 @@
+export ChargedSpecie
 export ELECTRON
 export POSITRON
 export PROTON
