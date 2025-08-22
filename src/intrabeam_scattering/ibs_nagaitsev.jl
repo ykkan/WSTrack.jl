@@ -1,9 +1,42 @@
 export IBSNagaitsev
 
-Base.@kwdef struct IBSNagaitsev{T,SV<:AbstractVector{SVector{7,T}},FT<:Filter{T}}
+struct IBSNagaitsev{T,SV<:AbstractVector{SVector{7,T}},FT<:Filter{T}}
   T_rev::T
   lattice_optics::SV
-  filter::FT = RectBound{Float64}()
+  filter::FT
+end
+
+function IBSNagaitsev(;T_rev::T, optics_filename::String, n::Int=4096, filter::Filter{T}=RectBound{Float64}()) where {T} 
+  opt_mat = readdlm(optics_filename)
+  funcs = opticsfuncs(opt_mat)
+  opt = CuArray( optics_quadrature(funcs, gausslegendre(n)) )
+  return IBSNagaitsev(T_rev, opt, filter)  
+end
+
+function opticsfuncs(data::Matrix{T}) where {T}
+  n, m = size(data)
+  s = data[:,1]
+  smin, smax = s[1], s[end]
+  @. s = (2*s - smax - smin)/(smax - smin)
+  funcs = [AkimaInterpolation(data[:,j], s,) for j in 2:m] 
+  return funcs
+end
+
+function optics_quadrature(funcs::AbstractVector, qd::Tuple{Vector{T},Vector{T}}) where {T}
+  m = length(funcs) + 1
+  node = qd[1] 
+  w = qd[2]
+  n = length(w)
+  data = zeros(n, m)
+  data[:,1] = w
+  for j in 2:m
+    data[:,j] .= funcs[j-1].(node)
+  end
+  output = zeros(SVector{7,T},n)
+  for i in 1:n
+    output[i] = SVector{7,T}(data[i,:]...)
+  end
+  return output
 end
 
 function filtered_w(coord::Coord{T}, filter::Filter{T}, sigz::T) where {T}
@@ -126,18 +159,17 @@ function _ibs_nagaitsev_partial_integral(rc::T, emmx::T, emmy::T, sigpz::T, gamm
  
   Lc = log(2*sigy*(sigpz^2 + gamma^2*(emmx/betx + emmy/bety))/rc)
 
-  Ix = w*Lc*( betx/(2*sigx*sigy))*(Sx + ((dx/betx)^2 + phi^2)*Sp + Sxp)
-  Iy = w*Lc*( bety/(2*sigx*sigy)*psi )
-  Iz = w*Lc*( 1/(2*sigx*sigy)*Sp )
-
-  return SVector{3,T}(Ix/emmx, Iy/emmy, Iz/sigpz^2)
+  ix = w*Lc*( betx/(2*sigx*sigy))*(Sx + ((dx/betx)^2 + phi^2)*Sp + Sxp) * 0
+  iy = w*Lc*( bety/(2*sigx*sigy)*psi ) * 0
+  iz = w*Lc*( 1/(2*sigx*sigy)*Sp ) * 0
+  @cuprint Sp, Sx, Sxp
+  return SVector{3,T}(Sp, Sx, Sxp) #SVector{3,T}(Ix/emmx, Iy/emmy, Iz/sigpz^2)
 end
 
 function ibs_rate_nagaitsev(q::T, m::T, np::T, emmx::T, emmy::T, sigz::T, sigpz::T, gamma::T, optics) where {T}
   rc = e0/(4*pi*epsilon0)*q^2/m
   be = sqrt(1 - 1/gamma^2)
   A = np*rc^2*c0/(12*pi*be^3*gamma^5*sigz)
-
   I = mapreduce(x_vec -> _ibs_nagaitsev_partial_integral(rc, emmx, emmy, sigpz, gamma, x_vec...), +, optics)
   return A*I
 end

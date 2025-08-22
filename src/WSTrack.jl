@@ -5,6 +5,9 @@ using Random, Distributions, PDMats
 using SpecialFunctions
 using CUDA
 using Printf
+using DelimitedFiles
+using DataInterpolations
+using FastGaussQuadrature
 
 const GLOBAL_BLOCK_SIZE = 256
 
