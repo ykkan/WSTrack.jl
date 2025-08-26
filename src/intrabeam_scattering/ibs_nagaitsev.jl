@@ -6,10 +6,10 @@ struct IBSNagaitsev{T,SV<:AbstractVector{SVector{7,T}},FT<:Filter{T}}
   filter::FT
 end
 
-function IBSNagaitsev(;T_rev::T, optics_filename::String, n::Int=4096, filter::Filter{T}=RectBound{Float64}()) where {T} 
+function IBSNagaitsev(;T_rev::T, optics_filename::String, n::Int=2^15, filter::Filter{T}=RectBound{Float64}()) where {T} 
   opt_mat = readdlm(optics_filename)
   funcs = opticsfuncs(opt_mat)
-  opt = CuArray( optics_quadrature(funcs, gausslegendre(n)) )
+  opt =  CuArray( optics_quadrature(funcs, gausslegendre(n)) )
   return IBSNagaitsev(T_rev, opt, filter)  
 end
 
@@ -159,21 +159,48 @@ function _ibs_nagaitsev_partial_integral(rc::T, emmx::T, emmy::T, sigpz::T, gamm
  
   Lc = log(2*sigy*(sigpz^2 + gamma^2*(emmx/betx + emmy/bety))/rc)
 
-  ix = w*Lc*( betx/(2*sigx*sigy))*(Sx + ((dx/betx)^2 + phi^2)*Sp + Sxp) * 0
-  iy = w*Lc*( bety/(2*sigx*sigy)*psi ) * 0
-  iz = w*Lc*( 1/(2*sigx*sigy)*Sp ) * 0
-  @cuprint Sp, Sx, Sxp
-  return SVector{3,T}(Sp, Sx, Sxp) #SVector{3,T}(Ix/emmx, Iy/emmy, Iz/sigpz^2)
+  Ix = w*Lc*( betx/(2*sigx*sigy))*(Sx + ((dx/betx)^2 + phi^2)*Sp + Sxp)
+  Iy = w*Lc*( bety/(2*sigx*sigy)*psi )
+  Iz = w*Lc*( 1/(2*sigx*sigy)*Sp )
+  return SVector{3,T}(Ix/emmx, Iy/emmy, Iz/sigpz^2)
 end
 
-function ibs_rate_nagaitsev(q::T, m::T, np::T, emmx::T, emmy::T, sigz::T, sigpz::T, gamma::T, optics) where {T}
+function _ibs_rate_nagaitsev_gpu(q::T, m::T, np::T, emmx::T, emmy::T, sigz::T, sigpz::T, gamma::T, optics::CuDeviceVector{SVector{7,T},1},ibs_out::CuDeviceVector{T,1}, n::Int) where {T}
   rc = e0/(4*pi*epsilon0)*q^2/m
   be = sqrt(1 - 1/gamma^2)
   A = np*rc^2*c0/(12*pi*be^3*gamma^5*sigz)
-  I = mapreduce(x_vec -> _ibs_nagaitsev_partial_integral(rc, emmx, emmy, sigpz, gamma, x_vec...), +, optics)
-  return A*I
+ 
+  tid = threadIdx().x
+  bid = blockIdx().x
+  block_size = blockDim().x
+  gid = tid + (bid - 1) * block_size 
+
+  local_ibs_x = zero(T)
+  local_ibs_y = zero(T)
+  local_ibs_z = zero(T)
+  if gid <= n
+    x,y,z = _ibs_nagaitsev_partial_integral(rc, emmx, emmy, sigpz, gamma, optics[gid]...)
+    local_ibs_x = local_ibs_x + x
+    local_ibs_y = local_ibs_y + y
+    local_ibs_z = local_ibs_z + z
+  end
+  total_ibs_x = A * CUDA.reduce_block(+, local_ibs_x, zero(T), Val(true))
+  total_ibs_y = A * CUDA.reduce_block(+, local_ibs_y, zero(T), Val(true))
+  total_ibs_z = A * CUDA.reduce_block(+, local_ibs_z, zero(T), Val(true))
+  if tid == 1
+    @inbounds CUDA.@atomic ibs_out[1] += total_ibs_x
+    @inbounds CUDA.@atomic ibs_out[2] += total_ibs_y
+    @inbounds CUDA.@atomic ibs_out[3] += total_ibs_z
+  end
+  return nothing
 end
 
 
-
+function ibs_rate_nagaitsev(q::T, m::T, np::T, emmx::T, emmy::T, sigz::T, sigpz::T, gamma::T, optics::CuArray{SVector{7,T},1,CUDA.DeviceMemory}) where {T}
+  total_ibs = CuArray(zeros(T,3))
+  n = length(optics)
+  nb = ceil(Int, n/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _ibs_rate_nagaitsev_gpu(q, m, np, emmx, emmy, sigz, sigpz, gamma, optics, total_ibs,n)
+  return Array(total_ibs)
+end
 
