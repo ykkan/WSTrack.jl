@@ -8,6 +8,7 @@ using Printf
 using DelimitedFiles
 using DataInterpolations
 using FastGaussQuadrature
+using FFTW
 
 const GLOBAL_BLOCK_SIZE = 256
 
