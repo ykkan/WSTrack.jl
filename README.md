@@ -15,25 +15,30 @@ or with Pkg mode (hitting `]` in the command prompt)
 pkg> add https://github.com/ykkan/WSTrack.jl.git
 ```
 
-## Example - EIC CDR Simulation (GPU simulation)
+## Example - EIC CDR Simulation for Proton (GPU simulation)
 ```julia
 using WSTrack
 using StaticArrays
+using CUDA
 
-# create weak beam (proton) on GPU 
-nmpar = 1024000
+# create test particles (proton) on GPU 
+nmpar = 102400
 beam_gpu = BeamGPU(
             sp=PROTON, 
             num_particle=0.6881e11, 
             energy=275.0e9, 
             num_macro_particle=nmpar,
-            dist=Gaussian(emmx=11.3e-9, emmy=1.0e-9, betx=0.8, bety=0.072, sigz=6e-2, sigpz=6.6e-4)
+            dist=Gaussian(emmx=11.3e-9, emmy=1.0e-9, emmz=3.96e-5, betx=0.8, bety=0.072, betz=90.909)
            )
 
-# crate strong beam element (electron)
-sb = StrongBeam(npar=1.7203e11, sp=ELECTRON,
-                emmx=20.0e-9, emmy=1.3e-9, sigz=0.7e-2, betx=0.45, bety=0.056, 
-                nslice=7, cross_angle=25e-3, f_crab=200.0e6)
+# crate beam-beam kick beam element (electron beam)
+emmx = 20e-9
+emmy = 1.3e-9
+betx = 0.45
+bety = 0.056
+sb = StrongBeamDecoupled(np=1.7203e11, sp=ELECTRON,
+      sigx=sqrt(emmx*betx), sigpx=sqrt(emmx/betx), sigy=sqrt(emmy*bety), sigpy=sqrt(emmy/bety), sigz=0.7e-2,
+      nslice=1, cross_angle=25e-3, f_crab=200.0e6)
 
 # define linear one-turn map element
 oneturn = OneTurn(betx=0.8, bety=0.072, alx=0.0, aly=0.0, 
@@ -43,17 +48,18 @@ oneturn = OneTurn(betx=0.8, bety=0.072, alx=0.0, aly=0.0,
 
 # define crab cavity elements
 ccstrength = -0.0003876287347981857
-cc1 = CrabCavity(f=200.0e6, kick_strength= ccstrength, strength_factors=SVector(1.0), phi=0.0)
-cc2 = CrabCavity(f=200.0e6, kick_strength= ccstrength, strength_factors=SVector(1.0), phi=0.0)
+cc1 = CrabCavity(f=200.0e6, kick_strength= ccstrength, strength_factors=SVector(4.0/3.0, -1.0/3.0), phi=0.0)
+cc2 = CrabCavity(f=200.0e6, kick_strength= ccstrength, strength_factors=SVector(4.0/3.0, -1.0/3.0), phi=0.0)
 
 
-# two transfermap elements between ip and crab cavity
+# define two transfermap elements between ip and crab cavity
 backward = @SMatrix [0 -32.2490309931942 0 0 0 0;
               0.031008683647302117 0 0 0 0 0;
                 0 0 1 0 0 0;
                 0 0 0 1 0 0;
                 0 0 0 0 1 0;
                 0 0 0 0 0 1;]
+
 
 forward = @SMatrix [0 32.2490309931942 0 0 0 0;
               -0.031008683647302117 0 0 0 0 0;
@@ -67,21 +73,23 @@ b = @SVector [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 ccip_backward = LinearMap(backward, b)
 ccip_forward = LinearMap(forward, b)
 
-# create two diagnosis elements
-gdiag = GeneralDiagnosis()
-ldiag = LuminosityDiagnosis()
-
-# tracking through the previously defined elements
-interact!(beam_gpu, gdiag)
+nmp, cov = covariance(beam_gpu)
+cov_printer(cov)
 for i in 1:1000000
   interact!(beam_gpu, ccip_backward)
   interact!(beam_gpu, cc1)
   interact!(beam_gpu, ccip_forward)
-  interact!(beam_gpu, sb, ldiag)
+  lumin = interact!(beam_gpu, sb)
   interact!(beam_gpu, ccip_forward)
   interact!(beam_gpu, cc2)
   interact!(beam_gpu, ccip_backward)
   interact!(beam_gpu, oneturn)
-  interact!(beam_gpu, gdiag)
+  nmp, cov = covariance(beam_gpu)
+  if i%30 == 0
+    # print limin and covariance of particles
+    println(lumin)
+    println(cov)
+  end
 end
 ```
+
