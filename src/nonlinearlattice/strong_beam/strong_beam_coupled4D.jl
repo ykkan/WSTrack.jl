@@ -78,7 +78,7 @@ function par_sl_interaction_coupled4D(x::T, y::T, s::T, Amp::T, sig11::T, sig12:
 
   z1 = ( sqrt(sig33_cp_bar/sig11_cp_bar)*x_bar + sqrt(sig11_cp_bar/sig33_cp_bar)*y_bar*im )/sqrt( 2*(sig11_cp_bar - sig33_cp_bar) )
   z2 = (x_bar + y_bar*im)/sqrt( 2*(sig11_cp_bar - sig33_cp_bar) )
-  ef = -sqrt(2*pi/(sig11_cp_bar - sig33_cp_bar)) * ( faddeeva(z2, Val(15)) - faddeeva(z1, Val(15) )*exp(-x_bar^2/sig11_cp_bar/2 -y_bar^2/sig33_cp_bar/2) )
+  ef = -sqrt(2*pi/(sig11_cp_bar - sig33_cp_bar)) * ( faddeeva(z2) - faddeeva(z1)*exp(-x_bar^2/sig11_cp_bar/2 -y_bar^2/sig33_cp_bar/2) )
   ux_bar = ef.im
   uy_bar = ef.re
 

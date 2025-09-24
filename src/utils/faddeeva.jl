@@ -3,7 +3,7 @@ export FaddeevaAlg
 export Weidemann
 export Abrarov
 
-@inline faddeeva(z) = faddeeva(z, Weidemann(16))
+@inline faddeeva(z) = faddeeva(z, Weidemann(48))
 
 abstract type FaddeevaAlg end
 

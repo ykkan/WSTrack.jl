@@ -48,7 +48,7 @@ function par_sl_interaction_decoupled(x::T, y::T, s::T, A::T, sigx::T, sigpx::T,
 
   z1 = ( sigy_cp/sigx_cp*x + sigx_cp/sigy_cp*y*im )/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
   z2 = (x + y*im)/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
-  ef = -sqrt(2*pi/(sigx_cp^2 - sigy_cp^2)) * ( faddeeva(z2, faddeeva_alg) - faddeeva(z1, faddeeva_alg)*exp(-x^2/(2*sigx_cp^2) -y^2/(2*sigy_cp^2)) )
+  ef = -sqrt(2*pi/(sigx_cp^2 - sigy_cp^2)) * ( faddeeva(z2) - faddeeva(z1)*exp(-x^2/(2*sigx_cp^2) -y^2/(2*sigy_cp^2)) )
   ux = ef.im
   uy = ef.re
 
@@ -62,6 +62,7 @@ function par_sl_interaction_decoupled(x::T, y::T, s::T, A::T, sigx::T, sigpx::T,
   uz = 0.5 * (0.5*uxx*dsigxxds_cp + 0.5*uyy*dsigyyds_cp)
 
   lumin = par_sl_luminosity(x, y, sigx, sigy)
+  lumin = isnan(lumin) ? zero(T) : lumin
   return (-A*ux, -A*uy, -A*uz, lumin)
 end
 

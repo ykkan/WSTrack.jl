@@ -75,7 +75,7 @@ function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}) where {T,SV,FT}
 
   nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
   @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_bruce_kick(coords, nmp, nmp_alive, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq, w_sum, sigz, sigpx, sigpy, sigpz, filter)
-  return nmp, cov, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq
+  return nmp_alive, cov, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq
 end
 
 
@@ -204,3 +204,11 @@ function ibs_rate_nagaitsev(q::T, m::T, np::T, emmx::T, emmy::T, sigz::T, sigpz:
   return Array(total_ibs)
 end
 
+#function ibs_rate_nagaitsev(q::T, m::T, np::T, emmx::T, emmy::T, sigz::T, sigpz::T, gamma::T, optics::CuArray{SVector{7,T},1,CUDA.DeviceMemory}) where {T}
+#  rc = e0/(4*pi*epsilon0)*q^2/m
+#  be = sqrt(1 - 1/gamma^2)
+#  A = np*rc^2*c0/(12*pi*be^3*gamma^5*sigz)
+#
+#  I = mapreduce(x_vec -> _ibs_nagaitsev_partial_integral(rc, emmx, emmy, sigpz, gamma, x_vec...), +, optics)
+#  return A*I
+#end
