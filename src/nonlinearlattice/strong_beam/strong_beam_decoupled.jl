@@ -68,7 +68,7 @@ end
 
 
 # CPU
-function interact!(beam::Beam{T}, elm::StrongBeamDecoupled{T}, faddeeva_alg::FaddeevaAlg) where {T}
+function interact!(beam::Beam{T}, elm::StrongBeamDecoupled{T}, faddeeva_alg::FaddeevaAlg=Weidemann(48)) where {T}
   phi = elm.cross_angle/2
   # test macro particle
   t_q = beam.q
@@ -126,7 +126,7 @@ end
 
 
 # GPU
-function interact!(beam::BeamGPU{T}, elm::StrongBeamDecoupled{T}, faddeeva_alg::FaddeevaAlg=Abrarov(16)) where {T}
+function interact!(beam::BeamGPU{T}, elm::StrongBeamDecoupled{T}, faddeeva_alg::FaddeevaAlg=Weidemann(48)) where {T}
   cross_angle = elm.cross_angle
 
   # test macro particle
