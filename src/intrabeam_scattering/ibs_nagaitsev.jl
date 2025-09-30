@@ -44,7 +44,12 @@ function filtered_w(coord::Coord{T}, filter::Filter{T}, sigz::T) where {T}
   return val 
 end
 
-function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}) where {T,SV,FT}
+function filtered_w(coord::Coord{T}, filter::Filter{T}, sigx::T, sigy::T, sigz::T) where {T}
+  val =  filter(coord) ? exp(-coord[1]^2/sigx^2/2 - coord[3]/sigy^2/2 -coord[5]^2/sigz^2/2) : zero(T)
+  return val 
+end
+# case 1: bruce kick with zmod 
+function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}, ::Val(:case1)) where {T,SV,FT}
   filter = ele.filter
   nmp_alive, cov = covariance(beam, filter) 
   sigx = sqrt(cov[1,1])  
@@ -74,12 +79,82 @@ function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}) where {T,SV,FT}
   w_sum = mapreduce(r -> filtered_w(r, filter, sigz), +, coords)
 
   nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
-  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_bruce_kick(coords, nmp, nmp_alive, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq, w_sum, sigz, sigpx, sigpy, sigpz, filter)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_bruce_kick_zmod(coords, nmp, nmp_alive, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq, w_sum, sigz, sigpx, sigpy, sigpz, filter)
+  return nmp_alive, cov, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq
+end
+
+# case 2: bruce kick with xyzmod 
+function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}, ::Val(:case2)) where {T,SV,FT}
+  filter = ele.filter
+  nmp_alive, cov = covariance(beam, filter) 
+  sigx = sqrt(cov[1,1])  
+  sigpx =sqrt(cov[2,2])
+  sigy = sqrt(cov[3,3])
+  sigpy = sqrt(cov[4,4])
+  sigz = sqrt(cov[5,5])
+  sigpz = sqrt(cov[6,6])
+  emmx = sqrt(cov[1,1]*cov[2,2] - cov[1,2]^2)
+  emmy = sqrt(cov[3,3]*cov[4,4] - cov[3,4]^2)
+  lattice_optics = ele.lattice_optics
+ 
+  nmp = beam.nmp
+  coords = beam.coords
+  np2nmp = beam.np2nmp 
+  np_alive = nmp_alive*np2nmp
+  sp_q = beam.q / np2nmp
+  sp_m = beam.m / np2nmp
+  sp_p0 = beam.p0 / np2nmp
+  gamma = (sp_p0/sp_m) + 1
+  ibs_rate_x, ibs_rate_y, ibs_rate_z = ibs_rate_nagaitsev(sp_q, sp_m, np_alive, emmx, emmy, sigz, sigpz, gamma, lattice_optics)
+  T_rev = ele.T_rev
+  demmx2emmx = T_rev * ibs_rate_x
+  demmy2emmy = T_rev * ibs_rate_y
+  dsigpzsq2sigpzsq = T_rev * ibs_rate_z
+
+  w_sum = mapreduce(r -> filtered_w(r, filter, sigx, sigy, sigz), +, coords)
+
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_bruce_kick_xyzmod(coords, nmp, nmp_alive, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq, w_sum, sigx, sigy, sigz, sigpx, sigpy, sigpz, filter)
+  return nmp_alive, cov, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq
+end
+
+# case 3: kick with same rate 
+function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}, ::Val(:case3)) where {T,SV,FT}
+  filter = ele.filter
+  nmp_alive, cov = covariance(beam, filter) 
+  sigx = sqrt(cov[1,1])  
+  sigpx =sqrt(cov[2,2])
+  sigy = sqrt(cov[3,3])
+  sigpy = sqrt(cov[4,4])
+  sigz = sqrt(cov[5,5])
+  sigpz = sqrt(cov[6,6])
+  emmx = sqrt(cov[1,1]*cov[2,2] - cov[1,2]^2)
+  emmy = sqrt(cov[3,3]*cov[4,4] - cov[3,4]^2)
+  lattice_optics = ele.lattice_optics
+ 
+  nmp = beam.nmp
+  coords = beam.coords
+  np2nmp = beam.np2nmp 
+  np_alive = nmp_alive*np2nmp
+  sp_q = beam.q / np2nmp
+  sp_m = beam.m / np2nmp
+  sp_p0 = beam.p0 / np2nmp
+  gamma = (sp_p0/sp_m) + 1
+  ibs_rate_x, ibs_rate_y, ibs_rate_z = ibs_rate_nagaitsev(sp_q, sp_m, np_alive, emmx, emmy, sigz, sigpz, gamma, lattice_optics)
+  T_rev = ele.T_rev
+  demmx2emmx = T_rev * ibs_rate_x
+  demmy2emmy = T_rev * ibs_rate_y
+  dsigpzsq2sigpzsq = T_rev * ibs_rate_z
+
+
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_same_kick(coords, nmp, nmp_alive, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq, sigpx, sigpy, sigpz, filter)
   return nmp_alive, cov, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq
 end
 
 
-function _gpu_bruce_kick(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_alive::Int, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, w_sum::T, sigz::T, sigpx::T, sigpy::T, sigpz::T, filter::Filter{T}) where {T}
+
+function _gpu_bruce_kick_zmod(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_alive::Int, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, w_sum::T, sigz::T, sigpx::T, sigpy::T, sigpz::T, filter::Filter{T}) where {T}
   d = Normal()
   tid = threadIdx().x
   bid = blockIdx().x
@@ -90,6 +165,62 @@ function _gpu_bruce_kick(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_a
     coord = coords[gid]
     x, px, y, py, z, pz = coord
     w = filtered_w(coord, filter, sigz)
+    px_new = px + rand(d)*sigpx*A*sqrt(w*demmx2emmx)
+    py_new = py + rand(d)*sigpy*A*sqrt(w*demmy2emmy)
+    pz_new = pz + rand(d)*sigpz*A*sqrt(w*dsigpzsq2sigpzsq)
+    coords[gid] = SVector{6,T}(x, px_new, y, py_new, z, pz_new)
+  end
+  return nothing
+end
+
+function _gpu_bruce_kick_xyzmod(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_alive::Int, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, w_sum::T, sigx::T, sigy::T, sigz::T, sigpx::T, sigpy::T, sigpz::T, filter::Filter{T}) where {T}
+  d = Normal()
+  tid = threadIdx().x
+  bid = blockIdx().x
+  block_size = blockDim().x 
+  gid = tid + (bid - 1) * block_size
+  A = sqrt(2*nmp/w_sum)
+  if gid <= nmp
+    coord = coords[gid]
+    x, px, y, py, z, pz = coord
+    w = filtered_w(coord, filter, sigx, sigy, sigz)
+    px_new = px + rand(d)*sigpx*A*sqrt(w*demmx2emmx)
+    py_new = py + rand(d)*sigpy*A*sqrt(w*demmy2emmy)
+    pz_new = pz + rand(d)*sigpz*A*sqrt(w*dsigpzsq2sigpzsq)
+    coords[gid] = SVector{6,T}(x, px_new, y, py_new, z, pz_new)
+  end
+  return nothing
+end
+
+function _gpu_same_kick(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_alive::Int, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, sigpx::T, sigpy::T, sigpz::T, filter::Filter{T}) where {T}
+  d = Normal()
+  tid = threadIdx().x
+  bid = blockIdx().x
+  block_size = blockDim().x 
+  gid = tid + (bid - 1) * block_size
+  A = sqrt(2)
+  if gid <= nmp
+    coord = coords[gid]
+    x, px, y, py, z, pz = coord
+    px_new = px + rand(d)*sigpx*A*sqrt(demmx2emmx)
+    py_new = py + rand(d)*sigpy*A*sqrt(demmy2emmy)
+    pz_new = pz + rand(d)*sigpz*A*sqrt(dsigpzsq2sigpzsq)
+    coords[gid] = SVector{6,T}(x, px_new, y, py_new, z, pz_new)
+  end
+  return nothing
+end
+
+function _gpu_damp_kick(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_alive::Int, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, w_sum::T, sigx::T, sigy::T, sigz::T, sigpx::T, sigpy::T, sigpz::T, filter::Filter{T}) where {T}
+  d = Normal()
+  tid = threadIdx().x
+  bid = blockIdx().x
+  block_size = blockDim().x 
+  gid = tid + (bid - 1) * block_size
+  A = sqrt(2*nmp/w_sum)
+  if gid <= nmp
+    coord = coords[gid]
+    x, px, y, py, z, pz = coord
+    w = filtered_w(coord, filter, sigx, sigy, sigz)
     px_new = px + rand(d)*sigpx*A*sqrt(w*demmx2emmx)
     py_new = py + rand(d)*sigpy*A*sqrt(w*demmy2emmy)
     pz_new = pz + rand(d)*sigpz*A*sqrt(w*dsigpzsq2sigpzsq)
