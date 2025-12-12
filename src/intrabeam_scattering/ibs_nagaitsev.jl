@@ -193,6 +193,47 @@ function interact!(beam::BeamGPU{T}, ele::IBSNagaitsev{T,SV,FT}, ::Val{:case4}) 
   return nmp_alive, cov, demmx2emmx, demmy2emmy, dsigpzsq2sigpzsq
 end
 
+## EMM kick with custom rate
+function interact!(beam::BeamGPU{T}, ::Val{:emmkick}, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, nturn::Int=1) where {T}
+  filter = ele.filter
+  nmp_alive, cov = covariance(beam, filter) 
+  sigx = sqrt(cov[1,1])  
+  sigpx =sqrt(cov[2,2])
+  sigy = sqrt(cov[3,3])
+  sigpy = sqrt(cov[4,4])
+  sigz = sqrt(cov[5,5])
+  sigpz = sqrt(cov[6,6])
+  emmx = sqrt(cov[1,1]*cov[2,2] - cov[1,2]^2)
+  emmy = sqrt(cov[3,3]*cov[4,4] - cov[3,4]^2)
+  lattice_optics = ele.lattice_optics
+ 
+  nmp = beam.nmp
+  coords = beam.coords
+  np2nmp = beam.np2nmp 
+  np_alive = nmp_alive*np2nmp
+  sp_q = beam.q / np2nmp
+  sp_m = beam.m / np2nmp
+  sp_p0 = beam.p0 / np2nmp
+  gamma = (sp_p0/sp_m) + 1
+  ibs_rate_x, ibs_rate_y, ibs_rate_z = ibs_rate_nagaitsev(sp_q, sp_m, np_alive, emmx, emmy, sigz, sigpz, gamma, lattice_optics)
+  T_rev = ele.T_rev
+  demmx2emmx = T_rev * ibs_rate_x
+  demmy2emmy = T_rev * ibs_rate_y
+  demmz2emmz = T_rev * ibs_rate_z
+
+  demmx2emmx_nturn = (1 + demmx2emmx)^nturn - 1
+  demmy2emmy_nturn = (1 + demmy2emmy)^nturn - 1
+  demmz2emmz_nturn = (1 + demmz2emmz)^nturn - 1
+
+  w_sum = mapreduce(r -> filtered_w(r, filter, sigx, sigy, sigz), +, coords)
+
+  nb = ceil(Int, nmp/GLOBAL_BLOCK_SIZE)
+  @cuda threads=GLOBAL_BLOCK_SIZE blocks=nb _gpu_bruce_kick_xyzmod(coords, nmp, nmp_alive, demmx2emmx_nturn, demmy2emmy_nturn, demmz2emmz_nturn, w_sum, sigx, sigy, sigz, sigpx, sigpy, sigpz, filter)
+  return nmp_alive, cov, demmx2emmx_nturn, demmy2emmy_nturn, demmz2emmz_nturn
+end
+
+
+
 function _gpu_bruce_kick_zmod(coords::CuDeviceVector{SVector{6,T},1}, nmp::Int, nmp_alive::Int, demmx2emmx::T, demmy2emmy::T, dsigpzsq2sigpzsq::T, w_sum::T, sigz::T, sigpx::T, sigpy::T, sigpz::T, filter::Filter{T}) where {T}
   d = Normal()
   tid = threadIdx().x
