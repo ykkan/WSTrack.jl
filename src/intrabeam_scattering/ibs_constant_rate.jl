@@ -8,7 +8,7 @@ struct IBSConstantRate{T,FT<:Filter{T}}
   filter::FT
 end
 
-function IBSConstantRate(;rate_x::T, rate_y::T, rate_z::T, filter::Filter{T}=RectBound{Float64}()) where {T} 
+function IBSConstantRate(;T_rev::T, rate_x::T, rate_y::T, rate_z::T, filter::Filter{T}=RectBound{Float64}()) where {T} 
   return IBSConstantRate(T_rev, rate_x, rate_y, rate_z, filter)  
 end
 
