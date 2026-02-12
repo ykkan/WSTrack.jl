@@ -46,21 +46,27 @@ function par_sl_interaction_decoupled(x::T, y::T, s::T, A::T, sigx::T, sigpx::T,
   x = x - x0
   y = y - y0
 
-  z1 = ( sigy_cp/sigx_cp*x + sigx_cp/sigy_cp*y*im )/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
-  z2 = (x + y*im)/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
-  ef = -sqrt(2*pi/(sigx_cp^2 - sigy_cp^2)) * ( faddeeva(z2) - faddeeva(z1)*exp(-x^2/(2*sigx_cp^2) -y^2/(2*sigy_cp^2)) )
-  ux = ef.im
-  uy = ef.re
-
-  uxx = -(x*ux + y*uy)/(sigx_cp^2-sigy_cp^2) - 2/(sigx_cp^2-sigy_cp^2)*( 1 - sigy_cp/sigx_cp*exp(-x^2/2/sigx_cp^2 - y^2/2/sigy_cp^2) )
-  uyy =  (x*ux + y*uy)/(sigx_cp^2-sigy_cp^2) + 2/(sigx_cp^2-sigy_cp^2)*( 1 - sigx_cp/sigy_cp*exp(-x^2/2/sigx_cp^2 - y^2/2/sigy_cp^2) )
-
+  if abs((sigy_cp/sigx_cp) - 1.0) <= 1e-2
+    r2 = x^2 + y^2
+    expterm = exp(-r2/2/sigx_cp^2)
+    ux = 2*x/r2*(1 - expterm)
+    uy = 2*y/r2*(1 - expterm)
+    uxx = expterm/sigx_cp^2
+    uyy = uxx
+  else
+    z1 = ( sigy_cp/sigx_cp*x + sigx_cp/sigy_cp*y*im )/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
+    z2 = (x + y*im)/sqrt(2*sigx_cp^2 - 2*sigy_cp^2)
+    ef = -sqrt(2*pi/(sigx_cp^2 - sigy_cp^2)) * ( faddeeva(z2) - faddeeva(z1)*exp(-x^2/(2*sigx_cp^2) -y^2/(2*sigy_cp^2)) )
+    ux = ef.im
+    uy = ef.re
+    uxx = -(x*ux + y*uy)/(sigx_cp^2-sigy_cp^2) - 2/(sigx_cp^2-sigy_cp^2)*( 1 - sigy_cp/sigx_cp*exp(-x^2/2/sigx_cp^2 - y^2/2/sigy_cp^2) )
+    uyy =  (x*ux + y*uy)/(sigx_cp^2-sigy_cp^2) + 2/(sigx_cp^2-sigy_cp^2)*( 1 - sigx_cp/sigy_cp*exp(-x^2/2/sigx_cp^2 - y^2/2/sigy_cp^2) )
+  end
 
   dsigxxds_cp = 2*(sigpx/csphi)^2*s
   dsigyyds_cp = 2*(sigpy/csphi)^2*s
 
   uz = 0.5 * (0.5*uxx*dsigxxds_cp + 0.5*uyy*dsigyyds_cp)
-
   lumin = par_sl_luminosity(x, y, sigx, sigy)
   lumin = isnan(lumin) ? zero(T) : lumin
   return (-A*ux, -A*uy, -A*uz, lumin)
