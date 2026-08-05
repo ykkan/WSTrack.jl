@@ -4,6 +4,7 @@ using StaticArrays
 using Random, Distributions, PDMats
 using SpecialFunctions
 using CUDA
+using CUDACore
 using Printf
 using DelimitedFiles
 using DataInterpolations

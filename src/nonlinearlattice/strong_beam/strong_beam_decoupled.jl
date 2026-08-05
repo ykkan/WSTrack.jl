@@ -207,7 +207,7 @@ function _gpu_interact_strong_beam_decoupled!(t_coords::CuDeviceVector{SVector{D
     t_coords[gid] = ilboost(x, px, y, py, z, pz, phi)
   end
   # blcok reduction for luminosity
-  total_luminosity = abs(t_q) * abs(b_Q_slice) * CUDA.reduce_block(+, local_luminosity, zero(T), Val(true))
+  total_luminosity = abs(t_q) * abs(b_Q_slice) * CUDACore.reduce_block(+, local_luminosity, zero(T), Val(true))
   if tid == 1
     @inbounds CUDA.@atomic luminosity_out[1] += total_luminosity
   end
