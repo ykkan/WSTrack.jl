@@ -19,20 +19,25 @@ end
 function StrongBeamDecoupled(;sp::ChargedSpecie{T}, np::Number, 
         sigx::T, sigpx::T, sigy::T, sigpy::T, sigz::T,
         nslice::Int, slicing_type=1, 
-        cross_angle::T=0.0, f_crab::T=1.0e38) where {T}
+        cross_angle::T=0.0) where {T}
 
   z_centroids = _zcentroids(nslice, sigz, slicing_type)
 
+
   # generated crabbed slice centroids
-  k_crab = 2*pi*f_crab/c0
-  phi = cross_angle/2
+  x_centroids = zeros(T,length(z_centroids))
+  if f_crab !== nothing
+    k_crab = 2*pi*f_crab/c0
+    phi = cross_angle/2
+    x_centroids = [-tan(phi)*(sin(k_crab*z)/k_crab - z) for z in z_centroids]
+  end 
+
   sl_centroids = Vector{SVector{3,T}}(undef, nslice) 
   for i in 1:nslice
     z = z_centroids[i]
-    x = -tan(phi)*(sin(k_crab*z)/k_crab - z)
+    x = x_centroids[i]
     sl_centroids[i] = SVector{3,T}(x, 0, z)
   end
-
   return StrongBeamDecoupled(np, sp.q, sigx, sigpx, sigy, sigpy, sigz, cross_angle, nslice, sl_centroids)
 end
 

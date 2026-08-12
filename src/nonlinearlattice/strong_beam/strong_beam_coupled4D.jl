@@ -16,16 +16,21 @@ end
 
 function StrongBeamCoupled4D(;sp::ChargedSpecie{T}, np::Number,
         Sigma::AbstractVector{T}, sigz::T, nslice::Int, slicing_type=1, 
-        cross_angle::T, f_crab::T=1.0e38) where {T}
+        cross_angle::T, f_crab=nothing) where {T}
   z_centroids = _zcentroids(nslice, sigz, slicing_type)
 
   # generated crabbed slice centroids
-  k_crab = 2*pi*f_crab/c0
-  phi = cross_angle/2
+  x_centroids = zeros(T, length(z_centroids))
+  if f_crab !== nothing
+    k_crab = 2*pi*f_crab/c0
+    phi = cross_angle/2
+    x_centroids = [-tan(phi)*(sin(k_crab*z)/k_crab - z) for z in z_centroids]
+  end 
+
   sl_centroids = Vector{SVector{3,T}}(undef, nslice) 
   for i in 1:nslice
     z = z_centroids[i]
-    x = -tan(phi)*(sin(k_crab*z)/k_crab - z)
+    x = x_centroids[i]
     sl_centroids[i] = SVector{3,T}(x, 0, z)
   end
   return StrongBeamCoupled4D(np, sp.q, SVector{10,T}(Sigma), sigz, cross_angle, nslice, sl_centroids)
