@@ -19,7 +19,7 @@ end
 function StrongBeamDecoupled(;sp::ChargedSpecie{T}, np::Number, 
         sigx::T, sigpx::T, sigy::T, sigpy::T, sigz::T,
         nslice::Int, slicing_type=1, 
-        cross_angle::T=0.0) where {T}
+        cross_angle::T=0.0, f_crab=nothing) where {T}
 
   z_centroids = _zcentroids(nslice, sigz, slicing_type)
 
