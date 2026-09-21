@@ -36,7 +36,7 @@ function lboost(coord::SVector{6,T}, phi::T) where {T}
   py_new = py/cs
   pz_new = pz - px*tg + h*tg^2
 
-  ps_new = sqrt((1+pz_new^2) - px_new^2 - py_new^2)
+  ps_new = sqrt((1+pz_new)^2 - px_new^2 - py_new^2)
   hx_new = px_new/ps_new
   hy_new = py_new/ps_new
   hz_new = 1 - (1+pz_new)/ps_new
