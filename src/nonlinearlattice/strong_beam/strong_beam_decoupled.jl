@@ -126,7 +126,7 @@ function interact!(beam::Beam{T}, elm::StrongBeamDecoupled{T}, faddeeva_alg::Fad
       y = y - s*py
       pz = pz + 0.25 * (px^2 + py^2)
 
-      luminosity += par_sl_luminosity(x, y, sigx, sigy)
+      luminosity += lumin
     end
     coords[i] = ilboost(x, px, y, py, z, pz, phi)
   end
